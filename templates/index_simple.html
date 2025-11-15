@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product Importer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .nav { margin-bottom: 30px; }
+        .nav a { margin-right: 20px; text-decoration: none; color: #007bff; }
+        .upload-area { border: 2px dashed #ccc; padding: 40px; text-align: center; margin: 20px 0; }
+        .progress { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-bar { height: 100%; background: #007bff; transition: width 0.3s; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Upload</a>
+        <a href="/products">Products</a>
+    </div>
+
+    <h1>Product Importer</h1>
+    
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+        <p>Click to select CSV file</p>
+        <input type="file" id="fileInput" accept=".csv" style="display: none;">
+    </div>
+    
+    <div id="uploadStatus" class="hidden">
+        <div class="progress">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        <p id="statusText">Uploading...</p>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+
+        fileInput.addEventListener('change', uploadFile);
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadStatus.classList.remove('hidden');
+            progressBar.style.width = '10%';
+            statusText.textContent = 'Uploading file...';
+            statusText.className = 'status';
+
+            try {
+                // Simulate progress during upload
+                let progress = 10;
+                const progressInterval = setInterval(() => {
+                    if (progress < 90) {
+                        progress += Math.random() * 10;
+                        progressBar.style.width = Math.min(progress, 90) + '%';
+                        statusText.textContent = `Processing file... ${Math.floor(progress)}%`;
+                    }
+                }, 200);
+
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                clearInterval(progressInterval);
+                progressBar.style.width = '100%';
+                
+                const result = await response.json();
+                if (response.ok) {
+                    statusText.textContent = `Success! Imported ${result.imported} products.`;
+                    statusText.className = 'status success';
+                } else {
+                    statusText.textContent = 'Error: ' + result.detail;
+                    statusText.className = 'status error';
+                }
+            } catch (error) {
+                statusText.textContent = 'Upload failed: ' + error.message;
+                statusText.className = 'status error';
+            }
+        }
+    </script>
+</body>
+</html>

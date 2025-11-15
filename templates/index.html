@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Product Importer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .nav { margin-bottom: 30px; }
+        .nav a { margin-right: 20px; text-decoration: none; color: #007bff; }
+        .upload-area { border: 2px dashed #ccc; padding: 40px; text-align: center; margin: 20px 0; }
+        .progress { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; }
+        .progress-bar { height: 100%; background: #007bff; transition: width 0.3s; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .hidden { display: none; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Upload</a>
+        <a href="/products">Products</a>
+        <a href="/webhooks">Webhooks</a>
+    </div>
+
+    <h1>Product Importer</h1>
+    
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+        <p>Click to select CSV file or drag and drop</p>
+        <input type="file" id="fileInput" accept=".csv" style="display: none;">
+    </div>
+    
+    <div id="uploadStatus" class="hidden">
+        <div class="progress">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        <p id="statusText">Uploading...</p>
+        <button id="cancelBtn" class="btn btn-danger" onclick="cancelUpload()" style="display: none;">Cancel</button>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const progressBar = document.getElementById('progressBar');
+        const statusText = document.getElementById('statusText');
+        const cancelBtn = document.getElementById('cancelBtn');
+        
+        let currentTaskId = null;
+
+        fileInput.addEventListener('change', uploadFile);
+
+        async function uploadFile() {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            uploadStatus.classList.remove('hidden');
+            statusText.textContent = 'Starting upload...';
+
+            try {
+                const response = await fetch('/upload-direct', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    // Start real-time progress tracking
+                    trackProgress(result.task_id);
+                } else {
+                    showError(result.detail || 'Upload failed');
+                }
+            } catch (error) {
+                showError('Upload failed: ' + error.message);
+            }
+        }
+
+        function trackProgress(taskId) {
+            currentTaskId = taskId;
+            cancelBtn.style.display = 'inline-block';
+            
+            const eventSource = new EventSource(`/progress/${taskId}`);
+            
+            eventSource.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                progressBar.style.width = data.progress + '%';
+                statusText.textContent = data.status;
+                
+                if (data.completed) {
+                    setTimeout(() => {
+                        eventSource.close();
+                        cancelBtn.style.display = 'none';
+                        currentTaskId = null;
+                        
+                        if (data.error) {
+                            statusText.className = 'status error';
+                        } else if (data.cancelled) {
+                            statusText.className = 'status error';
+                        } else {
+                            statusText.className = 'status success';
+                        }
+                    }, 100);
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                // Only show error if not completed
+                if (currentTaskId) {
+                    eventSource.close();
+                    cancelBtn.style.display = 'none';
+                    showError('Connection lost');
+                }
+            };
+        }
+
+        async function cancelUpload() {
+            if (!currentTaskId) return;
+            
+            try {
+                await fetch(`/cancel/${currentTaskId}`, { method: 'POST' });
+                cancelBtn.style.display = 'none';
+            } catch (error) {
+                console.error('Cancel failed:', error);
+            }
+        }
+
+        async function checkProgress(taskId) {
+            try {
+                const response = await fetch(`/task/${taskId}`);
+                const result = await response.json();
+
+                if (result.state === 'PROGRESS') {
+                    const progress = Math.round(result.progress || 0);
+                    progressBar.style.width = progress + '%';
+                    statusText.textContent = `Processing... ${progress}% (${result.current || 0}/${result.total || 0} records)`;
+                    setTimeout(() => checkProgress(taskId), 500);
+                } else if (result.state === 'SUCCESS') {
+                    progressBar.style.width = '100%';
+                    statusText.textContent = `✓ Import completed! ${result.result.imported} products imported successfully.`;
+                    statusText.className = 'status success';
+                } else if (result.state === 'FAILURE') {
+                    showError('Import failed: ' + (result.error || 'Unknown error'));
+                } else {
+                    statusText.textContent = 'Initializing import...';
+                    setTimeout(() => checkProgress(taskId), 500);
+                }
+            } catch (error) {
+                showError('Error checking progress: ' + error.message);
+            }
+        }
+
+        function showError(message) {
+            statusText.textContent = message;
+            statusText.className = 'status error';
+        }
+    </script>
+</body>
+</html>

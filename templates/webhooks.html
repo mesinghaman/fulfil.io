@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webhooks - Product Importer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .nav { margin-bottom: 30px; }
+        .nav a { margin-right: 20px; text-decoration: none; color: #007bff; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; }
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .add-form { background: #f8f9fa; padding: 20px; border-radius: 5px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Upload</a>
+        <a href="/products">Products</a>
+        <a href="/webhooks">Webhooks</a>
+    </div>
+
+    <h1>Webhooks</h1>
+    
+    <div class="add-form">
+        <h3>Add Webhook</h3>
+        <form id="webhookForm">
+            <div class="form-group">
+                <label>URL:</label>
+                <input type="url" id="webhookUrl" required placeholder="https://example.com/webhook">
+            </div>
+            <div class="form-group">
+                <label>Event Type:</label>
+                <select id="webhookEventType" required>
+                    <option value="products_imported">Products Imported</option>
+                    <option value="product_created">Product Created</option>
+                    <option value="product_updated">Product Updated</option>
+                    <option value="product_deleted">Product Deleted</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="webhookEnabled" checked> Enabled
+                </label>
+            </div>
+            <button type="submit" class="btn">Add Webhook</button>
+        </form>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>URL</th>
+                <th>Event Type</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for webhook in webhooks %}
+            <tr>
+                <td>{{ webhook.url }}</td>
+                <td>{{ webhook.event_type }}</td>
+                <td>{{ 'Enabled' if webhook.enabled else 'Disabled' }}</td>
+                <td>{{ webhook.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                <td>
+                    <button class="btn btn-small" onclick="testWebhook({{ webhook.id }})">Test</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteWebhook({{ webhook.id }})">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <script>
+        document.getElementById('webhookForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('url', document.getElementById('webhookUrl').value);
+            formData.append('event_type', document.getElementById('webhookEventType').value);
+            formData.append('enabled', document.getElementById('webhookEnabled').checked);
+
+            try {
+                const response = await fetch('/webhooks', { method: 'POST', body: formData });
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const error = await response.json();
+                    alert(error.detail || 'Error adding webhook');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        async function testWebhook(id) {
+            try {
+                const response = await fetch(`/webhooks/${id}/test`, { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert(`Webhook test successful! Response code: ${result.code}`);
+                } else {
+                    alert(`Webhook test failed: ${result.message}`);
+                }
+            } catch (error) {
+                alert('Error testing webhook: ' + error.message);
+            }
+        }
+
+        async function deleteWebhook(id) {
+            if (!confirm('Delete this webhook?')) return;
+            
+            try {
+                const response = await fetch(`/webhooks/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert('Error deleting webhook');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

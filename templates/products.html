@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Products - Product Importer</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .nav { margin-bottom: 30px; }
+        .nav a { margin-right: 20px; text-decoration: none; color: #007bff; }
+        .controls { margin: 20px 0; display: flex; gap: 10px; align-items: center; }
+        .controls input, .controls select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn:hover { background: #0056b3; }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; }
+        .pagination { margin: 20px 0; text-align: center; }
+        .pagination a { margin: 0 5px; padding: 8px 12px; text-decoration: none; color: #007bff; border: 1px solid #ddd; }
+        .pagination .current { background: #007bff; color: white; }
+        .pagination span { margin: 0 5px; padding: 8px 12px; color: #666; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); }
+        .modal-content { background: white; margin: 10% auto; padding: 20px; width: 500px; border-radius: 5px; }
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Upload</a>
+        <a href="/products">Products</a>
+        <a href="/webhooks">Webhooks</a>
+    </div>
+
+    <h1>Products</h1>
+    
+    <div class="controls">
+        <input type="text" id="searchInput" placeholder="Search products..." value="{{ search }}">
+        <select id="activeFilter">
+            <option value="">All Status</option>
+            <option value="true" {% if active == true %}selected{% endif %}>Active</option>
+            <option value="false" {% if active == false %}selected{% endif %}>Inactive</option>
+        </select>
+        <button class="btn" onclick="filterProducts()">Filter</button>
+        <button class="btn" onclick="showAddModal()">Add Product</button>
+        <button class="btn btn-danger" onclick="deleteAllProducts()">Delete All</button>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>SKU</th>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in products %}
+            <tr>
+                <td>{{ product.sku }}</td>
+                <td>{{ product.name }}</td>
+                <td>{{ product.description[:100] }}{% if product.description|length > 100 %}...{% endif %}</td>
+                <td>{{ 'Active' if product.active else 'Inactive' }}</td>
+                <td>
+                    <button class="btn btn-small" onclick="editProduct({{ product.id }}, '{{ product.name }}', '{{ product.sku }}', '{{ product.description }}', {{ product.active|lower }})">Edit</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteProduct({{ product.id }})">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&search={{ search or '' }}{% if active %}&active={{ active }}{% endif %}">← Prev</a>
+        {% endif %}
+        
+        {% if page > 3 %}
+            <a href="?page=1&search={{ search or '' }}{% if active %}&active={{ active }}{% endif %}">1</a>
+            {% if page > 4 %}<span>...</span>{% endif %}
+        {% endif %}
+        
+        {% for p in range([page - 2, 1]|max, [page + 3, total_pages + 1]|min) %}
+            <a href="?page={{ p }}&search={{ search or '' }}{% if active %}&active={{ active }}{% endif %}" 
+               class="{% if p == page %}current{% endif %}">{{ p }}</a>
+        {% endfor %}
+        
+        {% if page < total_pages - 2 %}
+            {% if page < total_pages - 3 %}<span>...</span>{% endif %}
+            <a href="?page={{ total_pages }}&search={{ search or '' }}{% if active %}&active={{ active }}{% endif %}">{{ total_pages }}</a>
+        {% endif %}
+        
+        {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}&search={{ search or '' }}{% if active %}&active={{ active }}{% endif %}">Next →</a>
+        {% endif %}
+        
+        <span style="margin-left: 20px;">
+            Go to page: <input type="number" id="pageInput" min="1" max="{{ total_pages }}" style="width: 60px; padding: 4px;" onkeypress="if(event.key==='Enter') goToPage()">
+            <button onclick="goToPage()" style="padding: 4px 8px; margin-left: 5px;">Go</button>
+        </span>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Add Product</h3>
+            <form id="productForm">
+                <div class="form-group">
+                    <label>Name:</label>
+                    <input type="text" id="productName" required>
+                </div>
+                <div class="form-group">
+                    <label>SKU:</label>
+                    <input type="text" id="productSku" required>
+                </div>
+                <div class="form-group">
+                    <label>Description:</label>
+                    <textarea id="productDescription" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="productActive" checked> Active
+                    </label>
+                </div>
+                <button type="submit" class="btn">Save</button>
+                <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let editingId = null;
+
+        function filterProducts() {
+            const search = document.getElementById('searchInput').value;
+            const active = document.getElementById('activeFilter').value;
+            const params = new URLSearchParams();
+            if (search) params.append('search', search);
+            if (active) params.append('active', active);
+            window.location.href = '/products?' + params.toString();
+        }
+
+        function showAddModal() {
+            editingId = null;
+            document.getElementById('modalTitle').textContent = 'Add Product';
+            document.getElementById('productForm').reset();
+            document.getElementById('productActive').checked = true;
+            document.getElementById('productModal').style.display = 'block';
+        }
+
+        function editProduct(id, name, sku, description, active) {
+            editingId = id;
+            document.getElementById('modalTitle').textContent = 'Edit Product';
+            document.getElementById('productName').value = name;
+            document.getElementById('productSku').value = sku;
+            document.getElementById('productDescription').value = description;
+            document.getElementById('productActive').checked = active;
+            document.getElementById('productModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('productModal').style.display = 'none';
+        }
+
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('name', document.getElementById('productName').value);
+            formData.append('sku', document.getElementById('productSku').value);
+            formData.append('description', document.getElementById('productDescription').value);
+            formData.append('active', document.getElementById('productActive').checked);
+
+            const url = editingId ? `/products/${editingId}` : '/products';
+            const method = editingId ? 'PUT' : 'POST';
+
+            try {
+                const response = await fetch(url, { method, body: formData });
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    const error = await response.json();
+                    alert(error.detail || 'Error saving product');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        });
+
+        async function deleteProduct(id) {
+            if (!confirm('Delete this product?')) return;
+            
+            try {
+                const response = await fetch(`/products/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    location.reload();
+                } else {
+                    alert('Error deleting product');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function deleteAllProducts() {
+            if (!confirm('Delete ALL products? This cannot be undone!')) return;
+            
+            try {
+                const response = await fetch('/products-all', { method: 'DELETE' });
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`Success! Deleted ${result.deleted} products.`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + result.detail);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        function goToPage() {
+            const pageNum = document.getElementById('pageInput').value;
+            if (pageNum && pageNum >= 1 && pageNum <= {{ total_pages }}) {
+                const params = new URLSearchParams();
+                params.append('page', pageNum);
+                if ('{{ search }}') params.append('search', '{{ search }}');
+                {% if active %}params.append('active', '{{ active }}');{% endif %}
+                window.location.href = '/products?' + params.toString();
+            }
+        }
+    </script>
+</body>
+</html>
