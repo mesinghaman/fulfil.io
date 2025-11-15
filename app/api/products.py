@@ -226,6 +226,70 @@ async def get_products(
     })
 
 
+@router.post("/products")
+async def create_product(product_data: dict, db: Session = Depends(get_db)):
+    """Create a new product."""
+    try:
+        product = ProductService.create_product(
+            db=db,
+            name=product_data.get("name"),
+            sku=product_data.get("sku"),
+            description=product_data.get("description", ""),
+            active=product_data.get("active", True)
+        )
+        return {
+            "id": product.id,
+            "name": product.name,
+            "sku": product.sku,
+            "description": product.description,
+            "active": product.active
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/products/{product_id}")
+async def update_product(product_id: int, product_data: dict, db: Session = Depends(get_db)):
+    """Update an existing product."""
+    try:
+        product = ProductService.update_product(
+            db=db,
+            product_id=product_id,
+            name=product_data.get("name"),
+            sku=product_data.get("sku"),
+            description=product_data.get("description"),
+            active=product_data.get("active")
+        )
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        return {
+            "id": product.id,
+            "name": product.name,
+            "sku": product.sku,
+            "description": product.description,
+            "active": product.active
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/products/{product_id}")
+async def delete_product(product_id: int, db: Session = Depends(get_db)):
+    """Delete a product."""
+    try:
+        success = ProductService.delete_product(db=db, product_id=product_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Product not found")
+        return {"message": "Product deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/products-all")
 async def delete_all_products_direct(db: Session = Depends(get_db)):
     """
