@@ -113,7 +113,8 @@ async def get_progress_stream(task_id: str):
     async def event_stream():
         while task_id in progress_store:
             data = progress_store[task_id]
-            yield f"data: {data}\n\n"
+            import json
+            yield f"data: {json.dumps(data)}\n\n"
             if data.get('completed'):
                 await asyncio.sleep(1)
                 if task_id in progress_store:
@@ -129,6 +130,47 @@ async def get_progress_stream(task_id: str):
             "Connection": "keep-alive"
         }
     )
+
+
+@router.get("/task/{task_id}")
+async def get_task_status(task_id: str):
+    """
+    Get task status for progress polling.
+    
+    Args:
+        task_id (str): Task identifier
+        
+    Returns:
+        dict: Task status and progress information
+    """
+    if task_id not in progress_store:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    data = progress_store[task_id]
+    
+    # Convert to Celery-like format for compatibility
+    if data.get('completed'):
+        if 'error' in data:
+            return {
+                "state": "FAILURE",
+                "result": data.get('error', 'Unknown error')
+            }
+        else:
+            return {
+                "state": "SUCCESS",
+                "result": {
+                    "imported": data.get('imported', 0),
+                    "total": data.get('total', 0)
+                }
+            }
+    else:
+        return {
+            "state": "PROGRESS",
+            "progress": data.get('progress', 0),
+            "current": data.get('current', 0),
+            "total": data.get('total', 0),
+            "status": data.get('status', 'Processing...')
+        }
 
 
 @router.post("/cancel/{task_id}")
