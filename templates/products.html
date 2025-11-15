@@ -184,7 +184,9 @@
                     location.reload();
                 } else {
                     const error = await response.json();
-                    alert(error.detail || 'Error saving product');
+                    const errorMsg = typeof error.detail === 'string' ? error.detail : 
+                                   error.message || 'Error saving product';
+                    alert(errorMsg);
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -216,7 +218,9 @@
                     alert(`Success! Deleted ${result.deleted} products.`);
                     location.reload();
                 } else {
-                    alert('Error: ' + result.detail);
+                    const errorMsg = typeof result.detail === 'string' ? result.detail : 
+                                   result.message || 'Error deleting products';
+                    alert('Error: ' + errorMsg);
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
