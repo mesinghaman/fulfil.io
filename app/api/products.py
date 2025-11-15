@@ -227,15 +227,21 @@ async def get_products(
 
 
 @router.post("/products")
-async def create_product(product_data: dict, db: Session = Depends(get_db)):
+async def create_product(
+    name: str = Form(...),
+    sku: str = Form(...),
+    description: str = Form(""),
+    active: bool = Form(True),
+    db: Session = Depends(get_db)
+):
     """Create a new product."""
     try:
         product = ProductService.create_product(
             db=db,
-            name=product_data.get("name"),
-            sku=product_data.get("sku"),
-            description=product_data.get("description", ""),
-            active=product_data.get("active", True)
+            name=name,
+            sku=sku,
+            description=description,
+            active=active
         )
         return {
             "id": product.id,
@@ -249,16 +255,23 @@ async def create_product(product_data: dict, db: Session = Depends(get_db)):
 
 
 @router.put("/products/{product_id}")
-async def update_product(product_id: int, product_data: dict, db: Session = Depends(get_db)):
+async def update_product(
+    product_id: int,
+    name: str = Form(...),
+    sku: str = Form(...),
+    description: str = Form(""),
+    active: bool = Form(True),
+    db: Session = Depends(get_db)
+):
     """Update an existing product."""
     try:
         product = ProductService.update_product(
             db=db,
             product_id=product_id,
-            name=product_data.get("name"),
-            sku=product_data.get("sku"),
-            description=product_data.get("description"),
-            active=product_data.get("active")
+            name=name,
+            sku=sku,
+            description=description,
+            active=active
         )
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
@@ -272,8 +285,11 @@ async def update_product(product_id: int, product_data: dict, db: Session = Depe
         }
     except HTTPException:
         raise
-    except Exception as e:
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logging.error(f"Error updating product {product_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.delete("/products/{product_id}")
