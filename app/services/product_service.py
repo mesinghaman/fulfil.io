@@ -253,6 +253,113 @@ class ProductService:
         }
     
     @staticmethod
+    def create_product(
+        db: Session,
+        name: str,
+        sku: str,
+        description: str = "",
+        active: bool = True
+    ) -> Product:
+        """
+        Create a new product.
+        
+        Args:
+            db (Session): Database session
+            name (str): Product name
+            sku (str): Product SKU
+            description (str): Product description
+            active (bool): Product active status
+            
+        Returns:
+            Product: Created product
+        """
+        # Check if SKU already exists
+        existing = db.query(Product).filter(Product.sku.ilike(sku)).first()
+        if existing:
+            raise ValueError(f"Product with SKU '{sku}' already exists")
+        
+        product = Product(
+            name=name,
+            sku=sku.lower(),
+            description=description,
+            active=active
+        )
+        db.add(product)
+        db.commit()
+        db.refresh(product)
+        return product
+    
+    @staticmethod
+    def update_product(
+        db: Session,
+        product_id: int,
+        name: str = None,
+        sku: str = None,
+        description: str = None,
+        active: bool = None
+    ) -> Optional[Product]:
+        """
+        Update an existing product.
+        
+        Args:
+            db (Session): Database session
+            product_id (int): Product ID
+            name (str, optional): New product name
+            sku (str, optional): New product SKU
+            description (str, optional): New product description
+            active (bool, optional): New product active status
+            
+        Returns:
+            Product: Updated product or None if not found
+        """
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            return None
+        
+        # Check SKU uniqueness if updating SKU
+        if sku and sku.lower() != product.sku:
+            existing = db.query(Product).filter(
+                Product.sku.ilike(sku),
+                Product.id != product_id
+            ).first()
+            if existing:
+                raise ValueError(f"Product with SKU '{sku}' already exists")
+        
+        # Update fields
+        if name is not None:
+            product.name = name
+        if sku is not None:
+            product.sku = sku.lower()
+        if description is not None:
+            product.description = description
+        if active is not None:
+            product.active = active
+        
+        db.commit()
+        db.refresh(product)
+        return product
+    
+    @staticmethod
+    def delete_product(db: Session, product_id: int) -> bool:
+        """
+        Delete a product.
+        
+        Args:
+            db (Session): Database session
+            product_id (int): Product ID
+            
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        product = db.query(Product).filter(Product.id == product_id).first()
+        if not product:
+            return False
+        
+        db.delete(product)
+        db.commit()
+        return True
+    
+    @staticmethod
     def delete_all_products(db: Session) -> int:
         """
         Delete all products from database.
